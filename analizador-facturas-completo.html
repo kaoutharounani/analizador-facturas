@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizador de facturas de luz y gas | papernest</title>
+<meta name="description" content="Descubre cuánto puedes ahorrar en tu factura de luz o gas con una recomendación personalizada.">
+
+<!-- Tesseract.js para OCR en el navegador (gratuito, sin backend) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- PDF.js para extraer texto e imágenes de PDFs -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js"></script>
+
+<style>
+  :root {
+    --c-primary: #5A52FF;
+    --c-primary-dark: #4842D6;
+    --c-text: #000000;
+    --c-text-muted: #63697F;
+    --c-bg: #F7F7F9;
+    --c-card: #FFFFFF;
+    --c-border: #E5E5EC;
+    --c-success: #16A34A;
+    --c-green-energy: #0FC4B2;
+    --c-error: #DC2626;
+    --radius-std: 10px;
+    --radius-ppn: 18px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 12px 32px rgba(90,82,255,0.18);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    font-family: 'Avenir', 'Avenir Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--c-bg);
+    color: var(--c-text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  /* --- HERO --- */
+  .hero { text-align: center; margin-bottom: 40px; }
+  .hero .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--c-text-muted);
+    margin-bottom: 20px;
+  }
+  .hero .badge .dot {
+    width: 8px; height: 8px;
+    background: var(--c-green-energy);
+    border-radius: 50%;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 12px;
+  }
+  .hero h1 .accent { color: var(--c-primary); }
+  .hero p {
+    font-size: 17px;
+    color: var(--c-text-muted);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* --- CARD --- */
+  .card {
+    background: var(--c-card);
+    border-radius: var(--radius-ppn) var(--radius-std) var(--radius-ppn) var(--radius-std);
+    padding: 40px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--c-border);
+  }
+  @media (max-width: 600px) {
+    .card { padding: 28px 22px; }
+    .container { padding: 28px 16px; }
+  }
+
+  /* --- TABS --- */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    background: var(--c-bg);
+    padding: 6px;
+    border-radius: 10px;
+    margin-bottom: 28px;
+  }
+  .tab {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--c-text-muted);
+    transition: all 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .tab:hover { color: var(--c-text); }
+  .tab.active {
+    background: var(--c-card);
+    color: var(--c-text);
+    box-shadow: var(--shadow-sm);
+  }
+  .tab svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* --- MODE SELECTOR --- */
+  .mode-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 520px) { .mode-selector { grid-template-columns: 1fr; } }
+
+  .mode-card {
+    padding: 22px 20px;
+    border: 1.5px solid var(--c-border);
+    border-radius: var(--radius-std);
+    background: var(--c-card);
+    cursor: pointer;
+    transition: all 0.18s;
+    text-align: left;
+    font-family: inherit;
+    position: relative;
+  }
+  .mode-card:hover {
+    border-color: var(--c-primary);
+    background: #FAFAFC;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+  .mode-card.selected {
+    border-color: var(--c-primary);
+    background: #F4F3FF;
+    box-shadow: 0 0 0 1px var(--c-primary);
+  }
+  .mode-card .icon {
+    width: 40px; height: 40px;
+    background: var(--c-primary);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+  .mode-card .icon svg { width: 22px; height: 22px; stroke: white; fill: none; stroke-width: 2; }
+  .mode-card .title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--c-text);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mode-card .tag {
+    background: var(--c-green-energy);
+    color: white;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 100px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .mode-card .desc {
+    font-size: 13px;
+    color: var(--c-text-muted);
+    line-height: 1.45;
+  }
+
+  /* --- SECTIONS --- */
+  .section { display: none; }
+  .section.active { display: block; animation: fadeIn 0.3s ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* --- UPLOAD --- */
+  .upload-area {
+    border: 2px dashed var(--c-border);
+    border-radius: var(--radius-std);
+    padding: 40px 24px;
+    text-align: center;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    background: #FAFAFC;
+  }
+  .upload-area:hover, .upload-area.dragover {
+    border-color: var(--c-primary);
+    background: #F4F3FF;
+  }
+  .upload-area svg {
+    width: 44px; height: 44px;
+    stroke: var(--c-primary);
+    fill: none; stroke-width: 1.5;
+    margin-bottom: 14px;
+  }
+  .upload-area h3 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-area p { font-size: 13px; color: var(--c-text-muted); }
+  .upload-area .link {
+    color: var(--c-primary);
+    text-decoration: underline;
+    font-weight: 500;
+  }
+  #file-input { display: none; }
+
+  .file-preview {
+    display: none;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: #F4F3FF;
+    border: 1px solid #DCD9FF;
+    border-radius: var(--radius-std);
+    margin-top: 16px;
+  }
+  .file-preview.show { display: flex; }
+  .file-preview .file-icon {
+    width: 40px; height: 40px;
+    background: var(--c-primary);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .file-preview .file-icon svg { width: 22px; height: 22px; stroke: white; fill: none; stroke-width: 2; }
+  .file-preview .file-info { flex: 1; min-width: 0; }
+  .file-preview .file-name {
+    font-size: 14px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-preview .file-size { font-size: 12px; color: var(--c-text-muted); }
+  .file-preview .remove-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--c-text-muted);
+    padding: 6px; border-radius: 6px;
+  }
+  .file-preview .remove-btn:hover { background: rgba(0,0,0,0.05); color: var(--c-error); }
+
+  .privacy-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--c-bg);
+    border-radius: var(--radius-std);
+    font-size: 12px;
+    color: var(--c-text-muted);
+    line-height: 1.5;
+  }
+  .privacy-note svg {
+    width: 16px; height: 16px;
+    stroke: var(--c-success); fill: none; stroke-width: 2;
+    flex-shrink: 0; margin-top: 1px;
+  }
+
+  /* --- FORM (modo formulario) --- */
+  .form-title {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+  }
+  .form-subtitle {
+    font-size: 14px;
+    color: var(--c-text-muted);
+    margin-bottom: 20px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 520px) { .form-grid { grid-template-columns: 1fr; } }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; font-weight: 500; }
+  .field .hint { font-size: 12px; color: var(--c-text-muted); }
+  .field input, .field select {
+    padding: 12px 14px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-std);
+    font-family: inherit;
+    font-size: 15px;
+    background: var(--c-card);
+    color: var(--c-text);
+    transition: border-color 0.18s, box-shadow 0.18s;
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px rgba(90,82,255,0.12);
+  }
+  .field .input-suffix { position: relative; }
+  .field .input-suffix input { padding-right: 50px; width: 100%; }
+  .field .input-suffix .suffix {
+    position: absolute; right: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--c-text-muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  .option-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .option-card {
+    padding: 14px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-std);
+    background: var(--c-card);
+    cursor: pointer;
+    transition: all 0.18s;
+    text-align: center;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .option-card:hover { border-color: var(--c-primary); }
+  .option-card.selected {
+    border-color: var(--c-primary);
+    background: #F4F3FF;
+    color: var(--c-primary);
+    font-weight: 500;
+    box-shadow: 0 0 0 1px var(--c-primary);
+  }
+  .option-card .emoji { font-size: 22px; display: block; margin-bottom: 4px; }
+
+  /* --- BUTTONS --- */
+  .btn-row { display: flex; gap: 12px; margin-top: 24px; }
+  .btn-primary, .btn-secondary {
+    flex: 1;
+    padding: 14px 24px;
+    border: none;
+    border-radius: var(--radius-std);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+  }
+  .btn-primary { background: var(--c-primary); color: white; }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--c-primary-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+  }
+  .btn-primary:disabled { background: #C7C5E8; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--c-bg);
+    color: var(--c-text);
+    flex: 0 0 auto;
+    padding: 14px 20px;
+  }
+  .btn-secondary:hover { background: #EEEEF3; }
+  .btn-primary svg, .btn-secondary svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* --- LOADING --- */
+  .loading-state {
+    display: none;
+    text-align: center;
+    padding: 30px 20px;
+  }
+  .loading-state.show { display: block; }
+  .spinner {
+    width: 44px; height: 44px;
+    border: 3px solid var(--c-bg);
+    border-top-color: var(--c-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-state h3 { font-size: 17px; font-weight: 500; margin-bottom: 6px; }
+  .loading-state p { color: var(--c-text-muted); font-size: 14px; }
+  .progress-bar {
+    width: 100%;
+    max-width: 320px;
+    height: 6px;
+    background: var(--c-bg);
+    border-radius: 100px;
+    margin: 18px auto 0;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: var(--c-primary);
+    border-radius: 100px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .loading-substep {
+    font-size: 12px;
+    color: var(--c-text-muted);
+    margin-top: 12px;
+    min-height: 18px;
+  }
+
+  /* --- ERROR --- */
+  .error-msg {
+    display: none;
+    background: #FBE9E9;
+    border: 1px solid #F1A8A8;
+    color: var(--c-error);
+    padding: 14px 18px;
+    border-radius: var(--radius-std);
+    font-size: 13px;
+    margin-top: 16px;
+    line-height: 1.5;
+  }
+  .error-msg.show { display: block; }
+
+  /* --- REVIEW (datos extraídos) --- */
+  .review {
+    background: var(--c-bg);
+    padding: 20px;
+    border-radius: var(--radius-std);
+    margin-top: 16px;
+  }
+  .review h4 {
+    font-size: 14px;
+    font-weight: 800;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .review h4 svg { width: 18px; height: 18px; stroke: var(--c-success); fill: none; stroke-width: 2.5; }
+  .review-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .review-item {
+    background: white;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--c-border);
+  }
+  .review-item .lbl {
+    font-size: 11px;
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 2px;
+  }
+  .review-item .val {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .review-item input.edit {
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0;
+    width: 100%;
+  }
+  .review-item input.edit:focus {
+    outline: 1px solid var(--c-primary);
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+  }
+  .review .review-note {
+    font-size: 12px;
+    color: var(--c-text-muted);
+    font-style: italic;
+  }
+
+  /* --- RESULTS --- */
+  .results { display: none; }
+  .results.show { display: block; animation: fadeIn 0.4s ease; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .summary-item {
+    background: var(--c-bg);
+    padding: 16px;
+    border-radius: var(--radius-std);
+  }
+  .summary-item .label {
+    font-size: 11px;
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .summary-item .value {
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .recommendation {
+    background: linear-gradient(135deg, #5A52FF 0%, #4842D6 100%);
+    color: white;
+    padding: 32px;
+    border-radius: var(--radius-ppn) var(--radius-std) var(--radius-ppn) var(--radius-std);
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .recommendation::before {
+    content: '';
+    position: absolute;
+    top: -50%; right: -20%;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .recommendation .rec-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.15);
+    padding: 5px 12px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .recommendation h2 {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    position: relative;
+    letter-spacing: -0.01em;
+  }
+  .recommendation .rec-desc {
+    font-size: 15px;
+    opacity: 0.92;
+    margin-bottom: 24px;
+    position: relative;
+    line-height: 1.55;
+  }
+  .savings-callout {
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    padding: 16px 20px;
+    border-radius: var(--radius-std);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+  }
+  .savings-callout svg {
+    width: 24px; height: 24px;
+    stroke: white; fill: none; stroke-width: 2;
+    flex-shrink: 0;
+  }
+  .savings-callout .savings-text { font-size: 13px; opacity: 0.85; }
+  .savings-callout .savings-amount { font-size: 18px; font-weight: 800; margin-top: 2px; }
+
+  .cta-row { display: flex; gap: 12px; position: relative; flex-wrap: wrap; }
+  .cta-call {
+    flex: 1;
+    min-width: 180px;
+    background: white;
+    color: var(--c-primary);
+    padding: 16px 24px;
+    border-radius: var(--radius-std);
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 17px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.18s ease;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  }
+  .cta-call:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+  }
+  .cta-call svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2.2; }
+  .cta-call .stack { display: flex; flex-direction: column; align-items: flex-start; }
+  .cta-call .number {
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.7;
+    display: block;
+    margin-top: -2px;
+  }
+
+  .details-section {
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-std);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .details-section h3 {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .details-section h3 svg {
+    width: 18px; height: 18px;
+    stroke: var(--c-primary); fill: none; stroke-width: 2;
+  }
+  .details-section ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .details-section li {
+    font-size: 14px;
+    color: var(--c-text-muted);
+    padding-left: 22px;
+    position: relative;
+    line-height: 1.55;
+  }
+  .details-section li::before {
+    content: '';
+    position: absolute;
+    left: 4px; top: 8px;
+    width: 6px; height: 6px;
+    background: var(--c-primary);
+    border-radius: 50%;
+  }
+
+  .restart-btn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    background: transparent;
+    color: var(--c-text-muted);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-std);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .restart-btn:hover { background: var(--c-bg); color: var(--c-text); }
+
+  .disclaimer {
+    font-size: 12px;
+    color: var(--c-text-muted);
+    text-align: center;
+    margin-top: 16px;
+    font-style: italic;
+  }
+
+  .footer {
+    text-align: center;
+    margin-top: 32px;
+    color: var(--c-text-muted);
+    font-size: 13px;
+  }
+  .footer a { color: var(--c-primary); text-decoration: none; }
+
+  /* --- BACK TO MODES --- */
+  .back-modes {
+    background: none;
+    border: none;
+    color: var(--c-text-muted);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .back-modes:hover { color: var(--c-primary); }
+  .back-modes svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="hero">
+    <div class="badge">
+      <span class="dot"></span>
+      <span>Análisis gratuito en menos de 1 minuto</span>
+    </div>
+    <h1>Descubre cuánto puedes <span class="accent">ahorrar</span> en tu factura</h1>
+    <p>Sube tu factura para un análisis preciso o responde unas preguntas rápidas. Te recomendaremos la tarifa que mejor se adapte a tu consumo.</p>
+  </div>
+
+  <div class="card">
+
+    <!-- TABS (LUZ / GAS) -->
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-type="luz" role="tab">
+        <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Luz
+      </button>
+      <button class="tab" data-type="gas" role="tab">
+        <svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+        Gas
+      </button>
+    </div>
+
+    <!-- MODE SELECTOR -->
+    <div class="section active" id="section-mode">
+      <h2 class="form-title">¿Cómo prefieres analizar tu factura?</h2>
+      <p class="form-subtitle">Ambas opciones son gratis y sin compromiso.</p>
+
+      <div class="mode-selector">
+        <button class="mode-card" data-mode="upload">
+          <div class="icon">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="title">
+            Subir mi factura
+            <span class="tag">Preciso</span>
+          </div>
+          <div class="desc">Sube un PDF o foto de tu factura. Extraeremos los datos automáticamente para un análisis a medida.</div>
+        </button>
+
+        <button class="mode-card" data-mode="form">
+          <div class="icon">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          </div>
+          <div class="title">Responder unas preguntas</div>
+          <div class="desc">¿No tienes tu factura a mano? Responde 4 preguntas rápidas y te daremos una estimación orientativa.</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- MODO: SUBIR FACTURA -->
+    <div class="section" id="section-upload">
+      <button class="back-modes" data-back>
+        <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Otra forma de analizar
+      </button>
+      <h2 class="form-title">Sube tu factura</h2>
+      <p class="form-subtitle">PDF, JPG o PNG. Cuanto más legible, mejor será la extracción.</p>
+
+      <div class="upload-area" id="upload-area">
+        <svg viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <h3>Arrastra tu factura aquí</h3>
+        <p>o <span class="link">selecciona un archivo</span> · máx. 10 MB</p>
+        <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png">
+      </div>
+
+      <div class="file-preview" id="file-preview">
+        <div class="file-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="file-info">
+          <div class="file-name" id="file-name"></div>
+          <div class="file-size" id="file-size"></div>
+        </div>
+        <button class="remove-btn" id="remove-file" aria-label="Quitar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="privacy-note">
+        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <div><strong>Tu factura no se sube a ningún servidor.</strong> Todo el procesado se hace en tu navegador.</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="analyze-upload-btn" disabled>
+          <svg viewBox="0 0 24 24"><path d="M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>
+          Analizar mi factura
+        </button>
+      </div>
+
+      <div class="error-msg" id="upload-error"></div>
+    </div>
+
+    <!-- MODO: FORMULARIO RÁPIDO -->
+    <div class="section" id="section-form">
+      <button class="back-modes" data-back>
+        <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Otra forma de analizar
+      </button>
+      <h2 class="form-title">Cuéntanos tu situación</h2>
+      <p class="form-subtitle">No necesitas tu factura. Si no sabes algún dato, déjalo en blanco.</p>
+
+      <div class="form-grid">
+        <div class="field">
+          <label>Tipo de vivienda</label>
+          <select id="vivienda">
+            <option value="piso">Piso</option>
+            <option value="casa">Casa</option>
+            <option value="estudio">Estudio</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Personas en el hogar</label>
+          <select id="personas">
+            <option value="1">1 persona</option>
+            <option value="2" selected>2 personas</option>
+            <option value="3">3 personas</option>
+            <option value="4">4 personas</option>
+            <option value="5">5 o más personas</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top: 14px;">
+        <label>¿Cuándo sueles estar más en casa?</label>
+        <div class="option-cards" id="horario-cards">
+          <button type="button" class="option-card" data-value="dia"><span class="emoji">☀️</span>De día</button>
+          <button type="button" class="option-card selected" data-value="tarde-noche"><span class="emoji">🌆</span>Tardes y noches</button>
+          <button type="button" class="option-card" data-value="todo"><span class="emoji">🏠</span>Todo el día</button>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top: 14px;" id="form-luz-fields">
+        <div class="field">
+          <label>Importe medio mensual</label>
+          <div class="input-suffix">
+            <input type="number" id="luz-importe" placeholder="80" min="10" max="1000">
+            <span class="suffix">€</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Potencia contratada</label>
+          <select id="luz-potencia">
+            <option value="">No lo sé</option>
+            <option value="2.3">2.3 kW</option>
+            <option value="3.45">3.45 kW</option>
+            <option value="4.6" selected>4.6 kW</option>
+            <option value="5.75">5.75 kW</option>
+            <option value="6.9">6.9 kW</option>
+            <option value="8.05">8.05 kW</option>
+            <option value="9.2">9.2 kW</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top: 14px; display:none;" id="form-gas-fields">
+        <div class="field">
+          <label>Importe medio mensual</label>
+          <div class="input-suffix">
+            <input type="number" id="gas-importe" placeholder="50" min="10" max="500">
+            <span class="suffix">€</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Uso principal del gas</label>
+          <select id="gas-uso">
+            <option value="agua">Solo agua caliente</option>
+            <option value="agua-cocina">Agua caliente y cocina</option>
+            <option value="todo" selected>Calefacción + agua + cocina</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="analyze-form-btn">
+          Ver mi recomendación
+          <svg viewBox="0 0 24 24"><path d="M21 21l-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div class="loading-state" id="loading-state">
+      <div class="spinner"></div>
+      <h3 id="loading-title">Analizando tu factura…</h3>
+      <p id="loading-subtitle">Estamos extrayendo los datos de tu factura</p>
+      <div class="progress-bar"><div class="fill" id="progress-fill"></div></div>
+      <div class="loading-substep" id="loading-substep"></div>
+    </div>
+
+    <!-- REVIEW (datos extraídos de la factura) -->
+    <div class="section" id="section-review">
+      <h2 class="form-title">Hemos extraído estos datos</h2>
+      <p class="form-subtitle">Revísalos y corrige cualquier dato si lo necesitas. Luego veremos tu recomendación.</p>
+
+      <div class="review">
+        <h4>
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          Datos detectados en tu factura
+        </h4>
+        <div class="review-grid" id="review-grid"></div>
+        <p class="review-note">Haz clic sobre cualquier dato para corregirlo si es incorrecto.</p>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" id="back-to-upload">
+          <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Atrás
+        </button>
+        <button class="btn-primary" id="confirm-review-btn">
+          Ver mi recomendación
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="results" id="results">
+      <div class="summary-grid" id="summary-grid"></div>
+
+      <div class="recommendation">
+        <div class="rec-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Tarifa recomendada
+        </div>
+        <h2 id="rec-title">—</h2>
+        <p class="rec-desc" id="rec-desc">—</p>
+
+        <div class="savings-callout">
+          <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <div>
+            <div class="savings-text">Ahorro estimado anual</div>
+            <div class="savings-amount" id="savings-amount">—</div>
+          </div>
+        </div>
+
+        <div class="cta-row">
+          <a href="tel:919014228" class="cta-call">
+            <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <div class="stack">
+              <span>Llámanos</span>
+              <span class="number">919 014 228</span>
+            </div>
+          </a>
+        </div>
+      </div>
+
+      <div class="details-section">
+        <h3>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          Por qué te recomendamos esta tarifa
+        </h3>
+        <ul id="analysis-details"></ul>
+      </div>
+
+      <p class="disclaimer">* Estimación orientativa. Un asesor puede confirmar tu ahorro real sin compromiso.</p>
+
+      <button class="restart-btn" id="restart-btn">Hacer otro análisis</button>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <p>Servicio gratuito sin compromiso · ¿Prefieres hablar con un experto? <a href="tel:919014228">919 014 228</a></p>
+  </div>
+
+</div>
+
+<script>
+// PDF.js worker
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
+}
+
+// ===========================================================
+// STATE
+// ===========================================================
+let currentType = 'luz';
+let currentMode = null; // 'upload' | 'form'
+let selectedFile = null;
+let extractedData = null;
+let formState = { horario: 'tarde-noche' };
+
+// ===========================================================
+// ELEMENTS
+// ===========================================================
+const tabs = document.querySelectorAll('.tab');
+const sections = {
+  mode: document.getElementById('section-mode'),
+  upload: document.getElementById('section-upload'),
+  form: document.getElementById('section-form'),
+  review: document.getElementById('section-review')
+};
+const loadingState = document.getElementById('loading-state');
+const results = document.getElementById('results');
+
+function showSection(key) {
+  Object.values(sections).forEach(s => s.classList.remove('active'));
+  loadingState.classList.remove('show');
+  results.classList.remove('show');
+  if (sections[key]) sections[key].classList.add('active');
+}
+
+// ===========================================================
+// TABS
+// ===========================================================
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentType = tab.dataset.type;
+    document.getElementById('form-luz-fields').style.display = currentType === 'luz' ? 'grid' : 'none';
+    document.getElementById('form-gas-fields').style.display = currentType === 'gas' ? 'grid' : 'none';
+  });
+});
+
+// ===========================================================
+// MODE SELECTION
+// ===========================================================
+document.querySelectorAll('.mode-card').forEach(card => {
+  card.addEventListener('click', () => {
+    currentMode = card.dataset.mode;
+    showSection(currentMode);
+  });
+});
+
+document.querySelectorAll('[data-back]').forEach(btn => {
+  btn.addEventListener('click', () => showSection('mode'));
+});
+
+// ===========================================================
+// HORARIO OPTION CARDS
+// ===========================================================
+document.querySelectorAll('#horario-cards .option-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('#horario-cards .option-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    formState.horario = card.dataset.value;
+  });
+});
+
+// ===========================================================
+// FILE UPLOAD
+// ===========================================================
+const uploadArea = document.getElementById('upload-area');
+const fileInput = document.getElementById('file-input');
+const filePreview = document.getElementById('file-preview');
+const fileName = document.getElementById('file-name');
+const fileSize = document.getElementById('file-size');
+const analyzeUploadBtn = document.getElementById('analyze-upload-btn');
+const uploadError = document.getElementById('upload-error');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+document.getElementById('remove-file').addEventListener('click', e => {
+  e.stopPropagation();
+  resetFile();
+});
+
+function handleFile(file) {
+  uploadError.classList.remove('show');
+  const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+  if (!validTypes.includes(file.type)) {
+    showUploadError('Formato no válido. Sube un PDF, JPG o PNG.');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showUploadError('El archivo es demasiado grande (máx. 10 MB).');
+    return;
+  }
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = formatBytes(file.size);
+  filePreview.classList.add('show');
+  uploadArea.style.display = 'none';
+  analyzeUploadBtn.disabled = false;
+}
+
+function resetFile() {
+  selectedFile = null;
+  fileInput.value = '';
+  filePreview.classList.remove('show');
+  uploadArea.style.display = 'block';
+  analyzeUploadBtn.disabled = true;
+  uploadError.classList.remove('show');
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function showUploadError(msg) {
+  uploadError.textContent = msg;
+  uploadError.classList.add('show');
+}
+
+// ===========================================================
+// ANALIZAR FACTURA SUBIDA
+// ===========================================================
+analyzeUploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  uploadError.classList.remove('show');
+  Object.values(sections).forEach(s => s.classList.remove('active'));
+  loadingState.classList.add('show');
+  document.getElementById('loading-title').textContent = 'Analizando tu factura…';
+  document.getElementById('loading-subtitle').textContent = 'Esto puede tardar 10-30 segundos';
+  setProgress(5, 'Preparando el documento…');
+
+  try {
+    let text;
+    if (selectedFile.type === 'application/pdf') {
+      text = await extractTextFromPDF(selectedFile);
+    } else {
+      text = await extractTextFromImage(selectedFile);
+    }
+
+    setProgress(90, 'Identificando datos…');
+    await sleep(300);
+
+    extractedData = parseFacturaText(text, currentType);
+
+    setProgress(100, '¡Listo!');
+    await sleep(400);
+
+    loadingState.classList.remove('show');
+    showReview(extractedData);
+    showSection('review');
+
+  } catch (err) {
+    console.error(err);
+    loadingState.classList.remove('show');
+    showSection('upload');
+    showUploadError(
+      'No hemos podido analizar la factura automáticamente. ' +
+      'Puedes probar con otra imagen más nítida, o llámanos al 919 014 228 y te ayudamos sin compromiso.'
+    );
+  }
+});
+
+function setProgress(pct, sub) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('loading-substep').textContent = sub || '';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// -----------------------------------------------------------
+// EXTRACCIÓN PDF: primero intenta texto nativo, si no OCR
+// -----------------------------------------------------------
+async function extractTextFromPDF(file) {
+  setProgress(15, 'Leyendo el PDF…');
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(it => it.str).join(' ') + '\n';
+  }
+
+  // Si el PDF no tiene texto extraíble (es un PDF escaneado), aplicamos OCR a las páginas
+  if (fullText.trim().length < 100) {
+    setProgress(25, 'Aplicando OCR (PDF escaneado)…');
+    fullText = await ocrPDFPages(pdf);
+  }
+
+  return fullText;
+}
+
+async function ocrPDFPages(pdf) {
+  let text = '';
+  const pagesToScan = Math.min(pdf.numPages, 2); // máximo 2 páginas
+  for (let i = 1; i <= pagesToScan; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const baseProgress = 25 + (i - 1) * (60 / pagesToScan);
+    const pageText = await runOCR(canvas, baseProgress, 60 / pagesToScan);
+    text += pageText + '\n';
+  }
+  return text;
+}
+
+async function extractTextFromImage(file) {
+  setProgress(15, 'Aplicando OCR a la imagen…');
+  const img = await fileToImage(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.getContext('2d').drawImage(img, 0, 0);
+  return await runOCR(canvas, 15, 75);
+}
+
+function fileToImage(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('No se pudo cargar la imagen'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function runOCR(canvas, baseProgress, range) {
+  const result = await Tesseract.recognize(canvas, 'spa+eng', {
+    logger: m => {
+      if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+        setProgress(baseProgress + m.progress * range, 'Leyendo el contenido…');
+      } else if (m.status) {
+        setProgress(baseProgress, m.status === 'loading tesseract core' ? 'Cargando módulo OCR…' :
+                                  m.status === 'initialized api' ? 'Iniciando análisis…' :
+                                  'Procesando…');
+      }
+    }
+  });
+  return result.data.text;
+}
+
+// -----------------------------------------------------------
+// PARSE TEXTO DE FACTURA → DATOS ESTRUCTURADOS
+// -----------------------------------------------------------
+function parseFacturaText(text, tipo) {
+  const t = text.replace(/\s+/g, ' ').toLowerCase();
+  const data = { tipo_energia: tipo };
+
+  // ---- IMPORTE TOTAL ----
+  // Patrones: "total a pagar 87,52 €", "importe factura: 92,30€", "total 123,45 eur"
+  const importePatterns = [
+    /total\s+a\s+pagar[:\s]+([\d.,]+)\s*€/,
+    /total\s+factura[:\s]+([\d.,]+)\s*€/,
+    /importe\s+total[:\s]+([\d.,]+)\s*€/,
+    /total\s+importe[:\s]+([\d.,]+)\s*€/,
+    /total[:\s]+([\d.,]+)\s*€/,
+    /([\d.,]+)\s*€\s*total/
+  ];
+  for (const re of importePatterns) {
+    const m = t.match(re);
+    if (m) {
+      const v = parseEUNumber(m[1]);
+      if (v > 5 && v < 5000) { data.importe = v; break; }
+    }
+  }
+
+  // ---- CONSUMO kWh ----
+  const consumoPatterns = [
+    /consumo[:\s]+([\d.,]+)\s*kwh/,
+    /([\d.,]+)\s*kwh\s+consumid/,
+    /consumo\s+total[:\s]+([\d.,]+)/,
+    /energía\s+consumida[:\s]+([\d.,]+)/,
+    /([\d.,]+)\s*kwh/
+  ];
+  for (const re of consumoPatterns) {
+    const m = t.match(re);
+    if (m) {
+      const v = parseEUNumber(m[1]);
+      if (v > 10 && v < 50000) { data.consumo_kwh = Math.round(v); break; }
+    }
+  }
+
+  // ---- POTENCIA (solo luz) ----
+  if (tipo === 'luz') {
+    const potPatterns = [
+      /potencia\s+contratada[:\s]+([\d.,]+)\s*kw/,
+      /potencia[:\s]+([\d.,]+)\s*kw/,
+      /([\d.,]+)\s*kw\s+contratad/
+    ];
+    for (const re of potPatterns) {
+      const m = t.match(re);
+      if (m) {
+        const v = parseEUNumber(m[1]);
+        if (v > 0.5 && v < 50) { data.potencia = v; break; }
+      }
+    }
+  }
+
+  // ---- COMERCIALIZADORA ----
+  const comercializadoras = [
+    { key: 'endesa', name: 'Endesa' },
+    { key: 'iberdrola', name: 'Iberdrola' },
+    { key: 'naturgy', name: 'Naturgy' },
+    { key: 'repsol', name: 'Repsol' },
+    { key: 'totalenergies', name: 'TotalEnergies' },
+    { key: 'total energies', name: 'TotalEnergies' },
+    { key: 'holaluz', name: 'Holaluz' },
+    { key: 'edp', name: 'EDP' },
+    { key: 'lucera', name: 'Lucera' },
+    { key: 'audax', name: 'Audax' },
+    { key: 'pepenergy', name: 'PepEnergy' },
+    { key: 'gana energía', name: 'Gana Energía' }
+  ];
+  for (const c of comercializadoras) {
+    if (t.includes(c.key)) { data.comercializadora = c.name; break; }
+  }
+
+  // ---- TIPO DE TARIFA ----
+  if (tipo === 'luz') {
+    if (t.includes('pvpc')) data.tarifa_tipo = 'PVPC (regulada)';
+    else if (t.includes('2.0td') || t.includes('2.0 td')) data.tarifa_tipo = '2.0TD';
+    else if (t.includes('indexada')) data.tarifa_tipo = 'Indexada';
+    else if (t.includes('discriminación') || t.includes('horaria')) data.tarifa_tipo = 'Discriminación horaria';
+    else if (t.includes('precio fijo') || t.includes('mercado libre')) data.tarifa_tipo = 'Mercado libre';
+  } else {
+    if (t.includes('tur')) data.tarifa_tipo = 'TUR (regulada)';
+    else if (t.includes('rl.1') || t.includes('rl 1')) data.tarifa_tipo = 'RL.1';
+    else if (t.includes('rl.2') || t.includes('rl 2')) data.tarifa_tipo = 'RL.2';
+    else if (t.includes('rl.3') || t.includes('rl 3')) data.tarifa_tipo = 'RL.3';
+  }
+
+  // ---- PERIODO (días facturados) ----
+  // Detectar fechas tipo "del 01/03/2024 al 31/03/2024"
+  const periodoMatch = t.match(/del\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s+al\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
+  if (periodoMatch) {
+    try {
+      const d1 = parseDate(periodoMatch[1]);
+      const d2 = parseDate(periodoMatch[2]);
+      const dias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+      if (dias > 0 && dias < 200) data.periodo_dias = dias;
+    } catch (e) {}
+  }
+
+  return data;
+}
+
+function parseEUNumber(s) {
+  // "1.234,56" → 1234.56  | "1234,56" → 1234.56 | "1234.56" → 1234.56
+  s = s.trim();
+  if (s.indexOf(',') !== -1 && s.indexOf('.') !== -1) {
+    // "1.234,56" - punto = miles, coma = decimal
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.indexOf(',') !== -1) {
+    s = s.replace(',', '.');
+  }
+  return parseFloat(s);
+}
+
+function parseDate(s) {
+  const parts = s.split(/[\/\-]/);
+  let year = parseInt(parts[2]);
+  if (year < 100) year += 2000;
+  return new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
+}
+
+// -----------------------------------------------------------
+// REVIEW UI
+// -----------------------------------------------------------
+function showReview(data) {
+  const grid = document.getElementById('review-grid');
+  grid.innerHTML = '';
+
+  const fields = [];
+  if (data.tipo_energia === 'luz') {
+    fields.push({ key: 'importe', label: 'Importe total', suffix: ' €', placeholder: 'Ej: 87,50' });
+    fields.push({ key: 'consumo_kwh', label: 'Consumo', suffix: ' kWh', placeholder: 'Ej: 220' });
+    fields.push({ key: 'potencia', label: 'Potencia', suffix: ' kW', placeholder: 'Ej: 4,6' });
+    fields.push({ key: 'periodo_dias', label: 'Periodo', suffix: ' días', placeholder: 'Ej: 30' });
+    fields.push({ key: 'comercializadora', label: 'Comercializadora', placeholder: 'Ej: Endesa' });
+    fields.push({ key: 'tarifa_tipo', label: 'Tarifa actual', placeholder: 'Ej: PVPC' });
+  } else {
+    fields.push({ key: 'importe', label: 'Importe total', suffix: ' €', placeholder: 'Ej: 50,00' });
+    fields.push({ key: 'consumo_kwh', label: 'Consumo', suffix: ' kWh', placeholder: 'Ej: 800' });
+    fields.push({ key: 'periodo_dias', label: 'Periodo', suffix: ' días', placeholder: 'Ej: 60' });
+    fields.push({ key: 'comercializadora', label: 'Comercializadora', placeholder: 'Ej: Naturgy' });
+    fields.push({ key: 'tarifa_tipo', label: 'Tarifa actual', placeholder: 'Ej: RL.2' });
+  }
+
+  fields.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'review-item';
+    const val = data[f.key];
+    const displayVal = val != null && val !== '' ? val : '';
+    div.innerHTML = `
+      <div class="lbl">${f.label}</div>
+      <input class="edit" type="text" data-key="${f.key}" value="${displayVal}${val != null && val !== '' && f.suffix ? f.suffix : ''}" placeholder="${f.placeholder}">
+    `;
+    grid.appendChild(div);
+  });
+
+  // Strip suffix on focus, restore on blur
+  grid.querySelectorAll('input.edit').forEach(input => {
+    const key = input.dataset.key;
+    const field = fields.find(x => x.key === key);
+    input.addEventListener('focus', () => {
+      if (field.suffix) input.value = input.value.replace(field.suffix, '').trim();
+    });
+    input.addEventListener('blur', () => {
+      const raw = input.value.trim();
+      if (raw && field.suffix && !raw.endsWith(field.suffix.trim())) {
+        input.value = raw + field.suffix;
+      }
+    });
+  });
+}
+
+// Back desde review
+document.getElementById('back-to-upload').addEventListener('click', () => showSection('upload'));
+
+// Confirmar review → calcular y mostrar resultados
+document.getElementById('confirm-review-btn').addEventListener('click', () => {
+  // Recoger valores editados
+  document.querySelectorAll('#review-grid input.edit').forEach(input => {
+    const key = input.dataset.key;
+    let val = input.value.trim().replace(/\s*(€|kwh|kw|días)\s*$/i, '').trim();
+    if (val === '') { extractedData[key] = null; return; }
+    // intentar convertir a número si aplica
+    if (['importe', 'consumo_kwh', 'potencia', 'periodo_dias'].includes(key)) {
+      const n = parseEUNumber(val);
+      extractedData[key] = isNaN(n) ? null : n;
+    } else {
+      extractedData[key] = val;
+    }
+  });
+
+  const result = analyzeFromExtracted(extractedData);
+  showSection(null);
+  showResults(result);
+});
+
+// ===========================================================
+// FORMULARIO RÁPIDO
+// ===========================================================
+document.getElementById('analyze-form-btn').addEventListener('click', () => {
+  Object.values(sections).forEach(s => s.classList.remove('active'));
+  loadingState.classList.add('show');
+  document.getElementById('loading-title').textContent = 'Analizando tu perfil…';
+  document.getElementById('loading-subtitle').textContent = 'Calculando la mejor tarifa para ti';
+  setProgress(100, '');
+
+  setTimeout(() => {
+    const result = currentType === 'luz' ? analyzeFormLuz() : analyzeFormGas();
+    loadingState.classList.remove('show');
+    showResults(result);
+  }, 1300);
+});
+
+// ===========================================================
+// ANÁLISIS A PARTIR DE DATOS EXTRAÍDOS (modo upload)
+// ===========================================================
+function analyzeFromExtracted(data) {
+  const tipo = data.tipo_energia;
+
+  // Calcular factura mensual estimada a partir del importe y el periodo
+  let importeMensual = null;
+  if (data.importe) {
+    if (data.periodo_dias && data.periodo_dias > 0) {
+      importeMensual = (data.importe / data.periodo_dias) * 30;
+    } else {
+      // Asumir periodo bimestral si no se detecta (típico en gas) o mensual (típico en luz)
+      importeMensual = tipo === 'gas' ? data.importe / 2 : data.importe;
+    }
+    importeMensual = Math.round(importeMensual);
+  }
+
+  const importeAnual = importeMensual ? importeMensual * 12 : null;
+
+  // Consumo anual estimado
+  let consumoAnual = null;
+  if (data.consumo_kwh && data.periodo_dias) {
+    consumoAnual = Math.round((data.consumo_kwh / data.periodo_dias) * 365);
+  } else if (data.consumo_kwh) {
+    consumoAnual = data.consumo_kwh * (tipo === 'gas' ? 6 : 12);
+  }
+
+  // Perfil
+  let perfil = 'medio';
+  if (tipo === 'luz' && consumoAnual) {
+    if (consumoAnual < 2000) perfil = 'bajo';
+    else if (consumoAnual > 4500) perfil = 'alto';
+  } else if (tipo === 'gas' && consumoAnual) {
+    if (consumoAnual < 4000) perfil = 'bajo';
+    else if (consumoAnual > 12000) perfil = 'alto';
+  }
+
+  // Recomendación
+  let recomendacion;
+  if (tipo === 'luz') {
+    if (perfil === 'alto' || (data.potencia && data.potencia >= 5.75)) {
+      recomendacion = {
+        nombre: 'Tarifa con discriminación horaria 2.0TD',
+        descripcion: 'Tu consumo es elevado. Aprovechando las horas valle (madrugada y fin de semana) puedes reducir significativamente tu factura.'
+      };
+    } else if (perfil === 'bajo') {
+      recomendacion = {
+        nombre: 'Tarifa de precio fijo con potencia ajustada',
+        descripcion: 'Tu consumo es bajo. Una tarifa de precio fijo con la potencia ajustada a tu uso real te da estabilidad y elimina sorpresas.'
+      };
+    } else {
+      recomendacion = {
+        nombre: 'Tarifa indexada o fija optimizada',
+        descripcion: 'Tu consumo es medio. Comparando tarifas del mercado libre puedes encontrar precios más competitivos que el PVPC o tu tarifa actual.'
+      };
+    }
+  } else {
+    if (perfil === 'alto') {
+      recomendacion = { nombre: 'Tarifa RL.2 con precio fijo', descripcion: 'Tu consumo elevado (calefacción + agua + cocina) encaja con la tarifa de acceso RL.2. Un precio fijo te da estabilidad durante todo el invierno.' };
+    } else if (perfil === 'bajo') {
+      recomendacion = { nombre: 'Tarifa RL.1 con término fijo reducido', descripcion: 'Tu consumo es bajo. La RL.1 tiene un término fijo más asequible, perfecto para hogares con uso ligero del gas.' };
+    } else {
+      recomendacion = { nombre: 'Tarifa RL.1 o RL.2 optimizada', descripcion: 'Tu consumo medio se beneficia de comparar entre RL.1 y RL.2. En el mercado libre encontrarás precios más competitivos que la TUR.' };
+    }
+  }
+
+  // Ahorro
+  let ahorroPct = 0.13;
+  if (data.tarifa_tipo && data.tarifa_tipo.toLowerCase().includes('pvpc')) ahorroPct = 0.10;
+  if (data.tarifa_tipo && data.tarifa_tipo.toLowerCase().includes('tur')) ahorroPct = 0.10;
+  if (tipo === 'luz' && data.potencia && data.potencia >= 5.75 && perfil === 'bajo') ahorroPct += 0.05;
+  if (perfil === 'alto') ahorroPct += 0.02;
+
+  const ahorro = importeAnual
+    ? Math.max(60, Math.min(Math.round(importeAnual * ahorroPct), tipo === 'luz' ? 480 : 350))
+    : (tipo === 'luz' ? 150 : 120);
+
+  // Detalles
+  const detalles = [];
+  if (importeAnual) {
+    detalles.push(`Tu factura anual estimada ronda los ${importeAnual} €, lo que indica un consumo ${perfil} para tu tipo de hogar.`);
+  } else {
+    detalles.push(`Hemos analizado los datos disponibles de tu factura para construir la recomendación.`);
+  }
+  if (data.comercializadora) {
+    detalles.push(`Estás actualmente con ${data.comercializadora}. Comparando con otras comercializadoras del mercado libre puedes acceder a precios más competitivos.`);
+  }
+  if (tipo === 'luz' && data.potencia) {
+    if (data.potencia >= 5.75 && perfil === 'bajo') {
+      detalles.push(`Tu potencia contratada (${data.potencia} kW) parece sobredimensionada para tu consumo. Bajándola podrías ahorrar entre 60 y 120 € adicionales al año en el término fijo.`);
+    } else {
+      detalles.push(`Tu potencia contratada (${data.potencia} kW) está dentro de lo razonable para tu consumo.`);
+    }
+  }
+  if (data.tarifa_tipo) {
+    detalles.push(`Tu tarifa actual es del tipo ${data.tarifa_tipo}. La recomendada se ajusta mejor a tu perfil específico de uso.`);
+  }
+  detalles.push(tipo === 'luz'
+    ? 'Consejo: programa los electrodomésticos pesados (lavavajillas, lavadora) en horas valle para maximizar el ahorro.'
+    : 'Consejo: bajar 1°C el termostato puede suponer hasta un 7% menos de consumo en calefacción.'
+  );
+
+  return {
+    tipo_energia: tipo,
+    importe_mensual: importeMensual,
+    importe_anual: importeAnual,
+    consumo_anual: consumoAnual,
+    potencia: data.potencia,
+    comercializadora: data.comercializadora,
+    perfil: perfil === 'bajo' ? 'Consumo bajo' : perfil === 'alto' ? 'Consumo alto' : 'Consumo medio',
+    recomendacion,
+    ahorro_estimado: ahorro,
+    detalles,
+    fuente: 'factura'
+  };
+}
+
+// ===========================================================
+// ANÁLISIS FORMULARIO (modo form)
+// ===========================================================
+function analyzeFormLuz() {
+  const importe = parseFloat(document.getElementById('luz-importe').value) || estimateImporteLuz();
+  const potencia = parseFloat(document.getElementById('luz-potencia').value) || 4.6;
+  const personas = parseInt(document.getElementById('personas').value);
+  const importeAnual = importe * 12;
+
+  let recomendacion, motivo;
+  if (formState.horario === 'tarde-noche') {
+    recomendacion = { nombre: 'Tarifa con discriminación horaria', descripcion: 'Como pasas más tiempo en casa por la tarde y noche, una tarifa con periodos horarios te permite aprovechar las horas valle (más baratas) para electrodomésticos pesados.' };
+    motivo = 'aprovechar las horas valle por la noche';
+  } else if (formState.horario === 'todo') {
+    recomendacion = { nombre: 'Tarifa de precio fijo todo el día', descripcion: 'Con un consumo distribuido durante todo el día, una tarifa de precio único te da estabilidad y evita preocuparte por los horarios.' };
+    motivo = 'estabilidad en el precio sin sustos';
+  } else {
+    recomendacion = { nombre: 'Tarifa indexada o PVPC optimizada', descripcion: 'Como estás en casa sobre todo de día (cuando el precio suele ser más bajo), puedes aprovecharte de una tarifa indexada al mercado mayorista.' };
+    motivo = 'aprovechar precios más bajos durante el día';
+  }
+
+  let ahorroPct = 0.13;
+  if (potencia >= 5.75 && personas <= 2) ahorroPct += 0.04;
+  const ahorro = Math.max(60, Math.min(Math.round(importeAnual * ahorroPct), 480));
+
+  const detalles = [];
+  detalles.push(`Tu factura anual estimada ronda los ${Math.round(importeAnual)} €, un consumo ${importe < 60 ? 'bajo' : importe < 100 ? 'medio' : 'alto'} para un hogar de ${personas} ${personas === 1 ? 'persona' : 'personas'}.`);
+  if (potencia >= 5.75 && personas <= 2) {
+    detalles.push(`Tu potencia contratada (${potencia} kW) parece sobredimensionada. Bajándola podrías ahorrar entre 60 y 120 € extra al año en el término fijo.`);
+  } else {
+    detalles.push(`Tu potencia contratada de ${potencia} kW está dentro de lo razonable para tu hogar.`);
+  }
+  detalles.push(`Te recomendamos esta tarifa para ${motivo}, según el patrón de uso que nos has indicado.`);
+  detalles.push('Consejo: programa lavavajillas y lavadora en horas valle (madrugada o fin de semana) para maximizar el ahorro.');
+
+  return {
+    tipo_energia: 'luz',
+    importe_mensual: Math.round(importe),
+    importe_anual: Math.round(importeAnual),
+    potencia,
+    perfil: personas <= 2 ? 'Hogar pequeño' : personas <= 3 ? 'Hogar medio' : 'Hogar grande',
+    recomendacion,
+    ahorro_estimado: ahorro,
+    detalles,
+    fuente: 'formulario'
+  };
+}
+
+function estimateImporteLuz() {
+  const base = { 1: 50, 2: 75, 3: 95, 4: 115, 5: 140 };
+  const personas = parseInt(document.getElementById('personas').value);
+  const vivienda = document.getElementById('vivienda').value;
+  let estimado = base[personas] || 90;
+  if (vivienda === 'casa') estimado *= 1.25;
+  if (vivienda === 'estudio') estimado *= 0.8;
+  return Math.round(estimado);
+}
+
+function analyzeFormGas() {
+  const importe = parseFloat(document.getElementById('gas-importe').value) || estimateImporteGas();
+  const uso = document.getElementById('gas-uso').value;
+  const importeAnual = importe * 12;
+
+  let recomendacion, motivo;
+  if (uso === 'todo') {
+    recomendacion = { nombre: 'Tarifa RL.2 con precio fijo', descripcion: 'Como usas el gas para calefacción además de agua y cocina, tu consumo es alto. La tarifa RL.2 está pensada para hogares como el tuyo.' };
+    motivo = 'tu consumo elevado encaja con la RL.2';
+  } else if (uso === 'agua-cocina') {
+    recomendacion = { nombre: 'Tarifa RL.1 optimizada', descripcion: 'Tu consumo medio (agua + cocina) encaja perfecto con la tarifa RL.1, que tiene un término fijo más bajo.' };
+    motivo = 'tu consumo medio se ajusta a la RL.1';
+  } else {
+    recomendacion = { nombre: 'Tarifa RL.1 con término fijo reducido', descripcion: 'Como solo usas el gas para agua caliente, tu consumo es bajo. Una RL.1 con término fijo reducido es lo más rentable.' };
+    motivo = 'tu consumo bajo se beneficia de un término fijo reducido';
+  }
+
+  const ahorroPct = 0.12;
+  const ahorro = Math.max(50, Math.min(Math.round(importeAnual * ahorroPct), 350));
+
+  const detalles = [];
+  detalles.push(`Tu factura anual de gas ronda los ${Math.round(importeAnual)} €, lo que indica un uso ${uso === 'todo' ? 'intensivo (calefacción incluida)' : uso === 'agua-cocina' ? 'medio' : 'puntual'}.`);
+  detalles.push(`La tarifa de acceso adecuada es la ${recomendacion.nombre.includes('RL.2') ? 'RL.2' : 'RL.1'}, ${motivo}.`);
+  detalles.push('Comparando comercializadoras del mercado libre puedes encontrar precios mejores que la TUR (regulada).');
+  detalles.push(uso === 'todo'
+    ? 'Consejo: bajar 1°C el termostato puede suponer hasta un 7% menos de consumo en calefacción.'
+    : 'Consejo: una ducha de 5 minutos consume mucho menos gas que un baño en bañera.'
+  );
+
+  return {
+    tipo_energia: 'gas',
+    importe_mensual: Math.round(importe),
+    importe_anual: Math.round(importeAnual),
+    perfil: uso === 'todo' ? 'Uso intensivo' : uso === 'agua-cocina' ? 'Uso medio' : 'Uso puntual',
+    recomendacion,
+    ahorro_estimado: ahorro,
+    detalles,
+    fuente: 'formulario'
+  };
+}
+
+function estimateImporteGas() {
+  const personas = parseInt(document.getElementById('personas').value);
+  const uso = document.getElementById('gas-uso').value;
+  const vivienda = document.getElementById('vivienda').value;
+  let base = 30;
+  if (uso === 'agua-cocina') base = 45;
+  if (uso === 'todo') base = 70;
+  base *= 1 + (personas - 2) * 0.15;
+  if (vivienda === 'casa') base *= 1.3;
+  return Math.round(base);
+}
+
+// ===========================================================
+// MOSTRAR RESULTADOS
+// ===========================================================
+function showResults(data) {
+  results.classList.add('show');
+
+  const grid = document.getElementById('summary-grid');
+  grid.innerHTML = '';
+  const items = [];
+  if (data.importe_mensual) items.push({ label: 'Factura mensual', value: `~${data.importe_mensual} €` });
+  if (data.importe_anual) items.push({ label: 'Anual', value: `~${data.importe_anual} €` });
+  if (data.consumo_anual) items.push({ label: 'Consumo anual', value: `${data.consumo_anual} kWh` });
+  items.push({ label: 'Perfil', value: data.perfil });
+  if (data.tipo_energia === 'luz' && data.potencia) items.push({ label: 'Potencia', value: `${data.potencia} kW` });
+  if (data.comercializadora) items.push({ label: 'Comercializadora', value: data.comercializadora });
+
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'summary-item';
+    div.innerHTML = `<div class="label">${item.label}</div><div class="value">${item.value}</div>`;
+    grid.appendChild(div);
+  });
+
+  document.getElementById('rec-title').textContent = data.recomendacion.nombre;
+  document.getElementById('rec-desc').textContent = data.recomendacion.descripcion;
+  document.getElementById('savings-amount').textContent = `Hasta ${data.ahorro_estimado} € / año`;
+
+  const detailsList = document.getElementById('analysis-details');
+  detailsList.innerHTML = '';
+  data.detalles.forEach(d => {
+    const li = document.createElement('li');
+    li.textContent = d;
+    detailsList.appendChild(li);
+  });
+
+  setTimeout(() => results.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+// ===========================================================
+// RESTART
+// ===========================================================
+document.getElementById('restart-btn').addEventListener('click', () => {
+  results.classList.remove('show');
+  resetFile();
+  extractedData = null;
+  showSection('mode');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+</script>
+
+</body>
+</html>
